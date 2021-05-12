@@ -1,17 +1,61 @@
 package main
 
 import (
+	"fmt"
 	"github.com/streadway/amqp"
 	"log"
 	"os"
+	"strconv"
+	"sync"
 )
 
-func main()  {
-	StartFeed()
+type Feed struct {
+	Name string
 }
 
+var wg sync.WaitGroup
 
-func StartFeed()  {
+func main() {
+	//StartFeed()
+	TestFeed()
+}
+
+func TestFeed() {
+
+	feedsChannel := make(chan Feed)
+	fakeChan := make(chan Feed)
+
+	go func() {
+		for i := 0; i < 5; i++ {
+			newFeed := Feed{
+				Name: "Hello " + strconv.Itoa(i),
+			}
+			go sendMessage(feedsChannel, newFeed)
+		}
+	}()
+
+	for i := 0; i < 5; i++ {
+		go handleMessage(feedsChannel)
+	}
+
+	<-fakeChan
+}
+
+func sendMessage(feedsChannel chan Feed, msg Feed) {
+	wg.Add(1)
+	fmt.Println("sending, %s", msg.Name)
+	feedsChannel <- msg
+	defer wg.Done()
+}
+
+func handleMessage(feedsChannel chan Feed) {
+	wg.Add(1)
+	message2 := <-feedsChannel
+	fmt.Println(message2.Name)
+	defer wg.Done()
+}
+
+func StartFeed() {
 	// Define RabbitMQ server URL.
 	amqpServerURL := os.Getenv("AMQP_SERVER_URL")
 
@@ -33,12 +77,12 @@ func StartFeed()  {
 
 	messages, err3 := rabbitMQChannel.Consume(
 		"Feed", // queue name
-		"",              // consumer
-		true,            // auto-ack
-		false,           // exclusive
-		false,           // no local
-		false,           // no wait
-		nil,             // arguments
+		"",     // consumer
+		true,   // auto-ack
+		false,  // exclusive
+		false,  // no local
+		false,  // no wait
+		nil,    // arguments
 	)
 	if err3 != nil {
 		log.Println(err)
