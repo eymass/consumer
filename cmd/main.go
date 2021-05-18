@@ -1,11 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"github.com/streadway/amqp"
 	"log"
 	"os"
-	"strconv"
 	"sync"
 )
 
@@ -13,46 +11,11 @@ type Feed struct {
 	Name string
 }
 
-var wg sync.WaitGroup
+var wgSend sync.WaitGroup
+var wgReceive sync.WaitGroup
 
 func main() {
-	//StartFeed()
-	TestFeed()
-}
-
-func TestFeed() {
-
-	feedsChannel := make(chan Feed)
-	fakeChan := make(chan Feed)
-
-	go func() {
-		for i := 0; i < 5; i++ {
-			newFeed := Feed{
-				Name: "Hello " + strconv.Itoa(i),
-			}
-			go sendMessage(feedsChannel, newFeed)
-		}
-	}()
-
-	for i := 0; i < 5; i++ {
-		go handleMessage(feedsChannel)
-	}
-
-	<-fakeChan
-}
-
-func sendMessage(feedsChannel chan Feed, msg Feed) {
-	wg.Add(1)
-	fmt.Println("sending, %s", msg.Name)
-	feedsChannel <- msg
-	defer wg.Done()
-}
-
-func handleMessage(feedsChannel chan Feed) {
-	wg.Add(1)
-	message2 := <-feedsChannel
-	fmt.Println(message2.Name)
-	defer wg.Done()
+	StartFeed()
 }
 
 func StartFeed() {
@@ -75,8 +38,39 @@ func StartFeed() {
 
 	defer rabbitMQChannel.Close()
 
+	// Exchange
+	err = rabbitMQChannel.ExchangeDeclare(
+		"feeds",  // name
+		"direct", // type
+		false,    // durable
+		false,    // auto-deleted
+		false,    // internal
+		false,    // no-wait
+		nil,      // arguments
+	)
+	failOnError(err, "Failed to declare an exchange")
+
+	q, err := rabbitMQChannel.QueueDeclare(
+		"feed", // name
+		false,  // durable
+		false,  // delete when unused
+		true,   // exclusive
+		false,  // no-wait
+		nil,    // arguments
+	)
+	failOnError(err, "Failed to declare a queue")
+
+	err = rabbitMQChannel.QueueBind(
+		q.Name,     // queue name
+		"NEW_FEED", // routing key
+		"feeds",    // exchange
+		false,
+		nil,
+	)
+	failOnError(err, "Failed to bind a queue")
+
 	messages, err3 := rabbitMQChannel.Consume(
-		"Feed", // queue name
+		q.Name, // queue name
 		"",     // consumer
 		true,   // auto-ack
 		false,  // exclusive
@@ -103,4 +97,10 @@ func StartFeed() {
 	}()
 
 	<-forever
+}
+
+func failOnError(err error, msg string) {
+	if err != nil {
+		log.Fatalf("%s: %s", msg, err)
+	}
 }

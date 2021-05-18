@@ -1,0 +1,7 @@
+#!bin/bash
+
+# Add admin user
+rabbitmqctl.bat add_user 'admin' 'admin'
+
+# Add services producers users
+rabbitmqctl.bat add_user 'admisn' 'admin'
